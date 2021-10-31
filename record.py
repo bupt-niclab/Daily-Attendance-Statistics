@@ -55,13 +55,23 @@ class Attendance:
 
     def write_res(self):
         title = ["姓名", "应到", "实到", "迟到", "早退", "旷工", "加班", "工作时间", "未签到", "未签退", "出勤时间", "加权出勤"]
+        late_style = xlwt.easyxf('pattern: pattern solid, fore_colour sky_blue')
+        not_be_style = xlwt.easyxf('pattern: pattern solid, fore_colour light_orange')
+
         for index, item in enumerate(title):
             self.sheet.write(self.write_row, index, title[index])
         self.write_row += 1
 
         for stu in self.data:
             for index, item in enumerate(stu):
-                self.sheet.write(self.write_row, index, item)
+                if index == 3 and item != 0:
+                    # 迟到，颜色标注
+                    self.sheet.write(self.write_row, index, item, late_style)
+                elif index == 5 and item != 0:
+                    # 旷工，颜色标注
+                    self.sheet.write(self.write_row, index, item, not_be_style)
+                else:
+                    self.sheet.write(self.write_row, index, item)
             self.write_row += 1
 
     def save_res(self):
@@ -104,8 +114,8 @@ class PersonSummary:
             # 实到
             if row[5].value != "":
                 self.be_num = self.be_num + float(row[5].value)
-            # 迟到
-            if row[6].value != "":
+            # 迟到, 迟到15分钟以内不计
+            if row[6].value != "" and parse_time(row[6].value) > parse_time("00:15"):
                 self.late_be_num = self.late_be_num + 0.5
                 self.penalty_time = self.penalty_time + parse_time(row[6].value)
             # 早退
@@ -113,7 +123,7 @@ class PersonSummary:
                 self.early_leave_num = self.early_leave_num + 0.5
                 self.penalty_time = self.penalty_time + parse_time(row[7].value)
             # 旷工
-            if row[8].value != "":
+            if row[2].value == "" and row[3].value == "":
                 self.not_be_num = self.not_be_num + 0.5
             # 加班
             if row[9].value != "":
@@ -124,16 +134,36 @@ class PersonSummary:
             # 出勤
             if row[11].value != "":
                 self.be_hour = self.be_hour + parse_time(row[11].value)
-            # 加权出勤
-            # 出勤时间 + 加班时间 - 旷工 * 每天打卡时间 - 早退 - 迟到
-            self.weighting_be_hour = self.be_hour + self.extra_hour - self.penalty_time - (
-                    self.penalty_unit * self.not_be_num)
             # 未签到
             if row[2].value == "" and row[3].value != "":
                 self.not_record_be = self.not_record_be + 0.5
+                # 未签到影响计算工作时间和出勤时间
+                if parse_time(row[3].value) < parse_time("16:00"):
+                    self.work_hour = self.work_hour + (parse_time("17:30") - parse_time("14:00"))
+                    self.be_hour = self.be_hour + (parse_time(row[3].value) - parse_time("14:00"))
+                else:
+                    if self.penalty_time == 7:
+                        self.work_hour = self.work_hour + (parse_time("12:00") - parse_time("8:30"))
+                        self.be_hour = self.be_hour + (parse_time(row[3].value) - parse_time("8:30"))
+                    else:
+                        self.work_hour = self.work_hour + (parse_time("12:00") - parse_time("9:00"))
+                        self.be_hour = self.be_hour + (parse_time(row[3].value) - parse_time("9:00"))
+
             # 未签退
             if row[3].value == "" and row[2].value != "":
-                self.not_record_leave = self.not_record_leave + 0.5
+                self.not_record_leave += self.not_record_leave + 0.5
+                # 未签到影响计算工作时间和出勤时间
+                if parse_time(row[2].value) > parse_time("12:00"):
+                    self.work_hour = self.work_hour + (parse_time("17:30") - parse_time("14:00"))
+                    self.be_hour = self.be_hour + (parse_time("17:30") - parse_time(row[2].value))
+                else:
+                    self.work_hour = self.work_hour + (parse_time("12:00") - parse_time("8:30"))
+                    self.be_hour = self.be_hour + (parse_time("12:00") - parse_time(row[2].value))
+
+        # 加权出勤
+        # 出勤时间 + 加班时间 - 旷工 * 每天打卡时间 - 早退 - 迟到
+        self.weighting_be_hour = self.be_hour + self.extra_hour - self.penalty_time - (
+                self.penalty_unit * self.not_be_num)
 
         return [self.name, self.should_be_num, self.be_num, self.late_be_num, self.early_leave_num, self.not_be_num,
                 round(self.extra_hour, 2), round(self.work_hour, 2), self.not_record_be, self.not_record_leave,
