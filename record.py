@@ -112,8 +112,8 @@ class PersonSummary:
             # 应到
             self.should_be_num = self.should_be_num + float(row[4].value)
             # 实到
-            if row[5].value != "":
-                self.be_num = self.be_num + float(row[5].value)
+            if row[2].value != "" or row[3].value != "":
+                self.be_num = self.be_num + 0.5
             # 迟到, 迟到15分钟以内不计
             if row[6].value != "" and parse_time(row[6].value) > parse_time("00:15"):
                 self.late_be_num = self.late_be_num + 0.5
