@@ -24,26 +24,34 @@ class Attendance:
         self.write_row = 0
         self.data = []
 
-    def calculate(self, fileName, doctor=False):
+    def calculate(self, fileName, extraFileName, doctor=False):
         # 读取源数据，并改变编码格式
         xls = xlrd.open_workbook_xls(fileName, encoding_override="gbk")
+        extraFileXls = xlrd.open_workbook_xls(extraFileName, encoding_override="gbk")
+
         sheet = xls.sheet_by_index(0)
+        extraFileSheet = extraFileXls.sheet_by_index(0)
+
         name_item_list = sheet.col_slice(0, 1, sheet.nrows)
 
         # 每个名字对应的行数
         name_row_map = {}
 
-        for index, item, in enumerate(name_item_list):
+        for index, item in enumerate(name_item_list):
             if item.value not in name_row_map:
                 name_row_map[item.value] = [sheet.row(index + 1)]
             else:
                 name_row_map[item.value].append(sheet.row(index + 1))
 
+        extraTimeMap = {}
+        for row in range(1, extraFileSheet.nrows):
+            extraTimeMap[extraFileSheet.cell(row, 0).value] = float(extraFileSheet.cell(row, 1).value)
+
         self.data = []
 
         # 遍历每个名字，计算该人本周的统计数据
         for key, value in name_row_map.items():
-            p = PersonSummary(key, value, doctor)
+            p = PersonSummary(key, value, extraTimeMap, doctor)
             self.data.append(p.calculate())
 
         # 按照加权出勤时间进行排序
@@ -85,7 +93,7 @@ class Attendance:
 
 
 class PersonSummary:
-    def __init__(self, name, rows, doctor):
+    def __init__(self, name, rows, extraTimeMap, doctor):
         self.name = name
         self.rows = rows
 
@@ -94,7 +102,7 @@ class PersonSummary:
         self.late_be_num = 0
         self.early_leave_num = 0
         self.not_be_num = 0
-        self.extra_hour = 0
+        self.extra_hour = extraTimeMap[self.name]
         self.work_hour = 0
         self.not_record_be = 0
         self.not_record_leave = 0
@@ -127,7 +135,8 @@ class PersonSummary:
                 self.not_be_num = self.not_be_num + 0.5
             # 加班
             if row[9].value != "":
-                self.extra_hour = self.extra_hour + parse_time(row[9].value)
+                pass
+                # self.extra_hour = self.extra_hour + parse_time(row[9].value)
             # 工作
             if row[10].value != "":
                 self.work_hour = self.work_hour + parse_time(row[10].value)
@@ -138,7 +147,7 @@ class PersonSummary:
             if row[2].value == "" and row[3].value != "":
                 self.not_record_be = self.not_record_be + 0.5
                 # 未签到影响计算工作时间和出勤时间
-                if parse_time(row[3].value) < parse_time("16:00"):
+                if parse_time(row[3].value) > parse_time("16:00"):
                     self.work_hour = self.work_hour + (parse_time("17:30") - parse_time("14:00"))
                     self.be_hour = self.be_hour + (parse_time(row[3].value) - parse_time("14:00"))
                 else:
@@ -151,7 +160,7 @@ class PersonSummary:
 
             # 未签退
             if row[3].value == "" and row[2].value != "":
-                self.not_record_leave += self.not_record_leave + 0.5
+                self.not_record_leave = self.not_record_leave + 0.5
                 # 未签到影响计算工作时间和出勤时间
                 if parse_time(row[2].value) > parse_time("12:00"):
                     self.work_hour = self.work_hour + (parse_time("17:30") - parse_time("14:00"))
@@ -173,7 +182,7 @@ class PersonSummary:
 
 if __name__ == "__main__":
     att = Attendance()
-    att.calculate("./1.xls")
-    att.calculate("./2.xls")
-    att.calculate("./3.xls")
+    att.calculate("./1.xls", "./4.xls")
+    att.calculate("./2.xls", "./5.xls")
+    att.calculate("./3.xls", "./6.xls")
     att.save_res()
